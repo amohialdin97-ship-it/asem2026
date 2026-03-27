@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Al-Asim Phone",
+  "description": "Smart phone store application for Al-Asim Phone, including user services and admin dashboard.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

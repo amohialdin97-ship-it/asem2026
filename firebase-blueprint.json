@@ -1,0 +1,146 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and permissions",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "isBlocked": { "type": "boolean" },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "maintenance": { "type": "boolean" },
+            "buyPhone": { "type": "boolean" },
+            "accounting": { "type": "boolean" },
+            "aiChat": { "type": "boolean" }
+          }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["uid", "firstName", "lastName", "phoneNumber", "email", "role", "isBlocked", "permissions", "createdAt"]
+    },
+    "SliderImage": {
+      "title": "SliderImage",
+      "description": "Images for the home screen slider",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "title": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["id", "url", "title", "order"]
+    },
+    "NewsItem": {
+      "title": "NewsItem",
+      "description": "News items for the scrolling bar",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "text", "createdAt"]
+    },
+    "MaintenanceOrder": {
+      "title": "MaintenanceOrder",
+      "description": "Maintenance service requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "problem": { "type": "string" },
+        "orderType": { "type": "string", "enum": ["maintenance", "programming"] },
+        "imageUrl": { "type": "string", "format": "uri" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "userPhone", "problem", "orderType", "status", "createdAt"]
+    },
+    "BuyPhoneOrder": {
+      "title": "BuyPhoneOrder",
+      "description": "Phone purchase requests",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userPhone": { "type": "string" },
+        "phoneDetails": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "userPhone", "phoneDetails", "status", "createdAt"]
+    },
+    "AccountingEntry": {
+      "title": "AccountingEntry",
+      "description": "Entries for the user's accounting book",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["customer", "supplier"] },
+        "name": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "type", "name", "amount", "currency", "createdAt"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global store settings",
+      "type": "object",
+      "properties": {
+        "contactPhone": { "type": "string" },
+        "locationUrl": { "type": "string" },
+        "socialMedia": {
+          "type": "object",
+          "properties": {
+            "facebook": { "type": "string" },
+            "whatsapp": { "type": "string" },
+            "instagram": { "type": "string" }
+          }
+        }
+      },
+      "required": ["contactPhone", "locationUrl"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/sliderImages/{imageId}": {
+      "schema": "SliderImage",
+      "description": "Home slider images"
+    },
+    "/newsItems/{newsId}": {
+      "schema": "NewsItem",
+      "description": "Scrolling news items"
+    },
+    "/maintenanceOrders/{orderId}": {
+      "schema": "MaintenanceOrder",
+      "description": "Maintenance requests"
+    },
+    "/buyPhoneOrders/{orderId}": {
+      "schema": "BuyPhoneOrder",
+      "description": "Phone purchase requests"
+    },
+    "/accountingEntries/{entryId}": {
+      "schema": "AccountingEntry",
+      "description": "User accounting entries"
+    },
+    "/settings/global": {
+      "schema": "AppSettings",
+      "description": "Global store settings"
+    }
+  }
+}
