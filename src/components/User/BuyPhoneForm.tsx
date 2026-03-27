@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { Send, Smartphone } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../firebase';
+import { db, auth, handleFirestoreError, OperationType, logUserActivity } from '../../firebase';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 
@@ -21,10 +21,11 @@ export const BuyPhoneForm: React.FC<{ onClose: () => void }> = ({ onClose }) => 
       await addDoc(collection(db, 'buyPhoneOrders'), {
         userId: auth.currentUser.uid,
         userPhone: auth.currentUser.phoneNumber || '',
-        details,
+        phoneDetails: details,
         status: 'pending',
         createdAt: Date.now()
       });
+      await logUserActivity(auth.currentUser.uid, 'إنشاء طلب شراء هاتف', `تم إنشاء طلب شراء هاتف جديد: ${details.substring(0, 50)}...`);
       onClose();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'buyPhoneOrders');

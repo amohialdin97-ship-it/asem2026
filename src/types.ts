@@ -71,6 +71,14 @@ export interface AccountingEntry {
   createdAt: number;
 }
 
+export interface UserActivity {
+  id: string;
+  userId: string;
+  action: string;
+  details: string;
+  createdAt: number;
+}
+
 export interface AppSettings {
   contactPhone: string;
   locationUrl: string;

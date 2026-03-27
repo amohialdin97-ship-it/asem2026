@@ -34,6 +34,13 @@ export const Home: React.FC<HomeProps> = ({ onTabChange }) => {
     whatsappNumber: '777777777'
   });
 
+  const [userPermissions, setUserPermissions] = useState({
+    maintenance: true,
+    buyPhone: true,
+    accounting: true,
+    aiChat: true
+  });
+
   useEffect(() => {
     // Fetch Slider Images
     const sliderQuery = query(collection(db, 'sliderImages'), orderBy('order', 'asc'));
@@ -56,12 +63,22 @@ export const Home: React.FC<HomeProps> = ({ onTabChange }) => {
       }
     });
 
-    // Fetch Unread Notifications
+    // Fetch User Permissions and Unread Notifications
     if (auth.currentUser) {
       let unsubscribeNotifs: () => void;
+      let unsubscribeUser: () => void;
       
-      const setupNotifications = async () => {
+      const setupUserAndNotifications = async () => {
         try {
+          unsubscribeUser = onSnapshot(doc(db, 'users', auth.currentUser!.uid), (docSnapshot) => {
+            if (docSnapshot.exists()) {
+              const userData = docSnapshot.data();
+              if (userData.permissions) {
+                setUserPermissions(userData.permissions);
+              }
+            }
+          });
+
           const userDoc = await getDoc(doc(db, 'users', auth.currentUser!.uid));
           const userPhone = userDoc.exists() ? userDoc.data().phoneNumber : auth.currentUser!.phoneNumber;
           
@@ -79,17 +96,18 @@ export const Home: React.FC<HomeProps> = ({ onTabChange }) => {
             setUnreadCount(snapshot.size);
           });
         } catch (error) {
-          console.error("Error setting up notifications:", error);
+          console.error("Error setting up user data:", error);
         }
       };
 
-      setupNotifications();
+      setupUserAndNotifications();
 
       return () => {
         unsubscribeSlider();
         unsubscribeNews();
         unsubscribeSettings();
         if (unsubscribeNotifs) unsubscribeNotifs();
+        if (unsubscribeUser) unsubscribeUser();
       };
     }
 
@@ -105,18 +123,42 @@ export const Home: React.FC<HomeProps> = ({ onTabChange }) => {
       id: 'maintenance', 
       name: 'طلب صيانة', 
       icon: <Wrench className="w-6 h-6" />, 
-      onClick: () => appSettings.maintenanceEnabled ? setActiveModal('maintenance') : alert('عذراً، هذه الخدمة غير متوفرة حالياً'),
-      disabled: !appSettings.maintenanceEnabled
+      onClick: () => {
+        if (!userPermissions.maintenance) return alert('عذراً، ليس لديك صلاحية للوصول إلى هذه الخدمة');
+        appSettings.maintenanceEnabled ? setActiveModal('maintenance') : alert('عذراً، هذه الخدمة غير متوفرة حالياً');
+      },
+      disabled: !appSettings.maintenanceEnabled || !userPermissions.maintenance
     },
     { 
       id: 'buy', 
       name: 'شراء هاتف', 
       icon: <Smartphone className="w-6 h-6" />, 
-      onClick: () => appSettings.buyPhoneEnabled ? setActiveModal('buy') : alert('عذراً، هذه الخدمة غير متوفرة حالياً'),
-      disabled: !appSettings.buyPhoneEnabled
+      onClick: () => {
+        if (!userPermissions.buyPhone) return alert('عذراً، ليس لديك صلاحية للوصول إلى هذه الخدمة');
+        appSettings.buyPhoneEnabled ? setActiveModal('buy') : alert('عذراً، هذه الخدمة غير متوفرة حالياً');
+      },
+      disabled: !appSettings.buyPhoneEnabled || !userPermissions.buyPhone
     },
-    { id: 'accounting', name: 'دفتر الحسابات', icon: <BookOpen className="w-6 h-6" />, onClick: () => setActiveModal('accounting') },
-    { id: 'ai', name: 'العاصم AI', icon: <Bot className="w-6 h-6" />, onClick: () => setActiveModal('ai') },
+    { 
+      id: 'accounting', 
+      name: 'دفتر الحسابات', 
+      icon: <BookOpen className="w-6 h-6" />, 
+      onClick: () => {
+        if (!userPermissions.accounting) return alert('عذراً، ليس لديك صلاحية للوصول إلى هذه الخدمة');
+        setActiveModal('accounting');
+      },
+      disabled: !userPermissions.accounting
+    },
+    { 
+      id: 'ai', 
+      name: 'العاصم AI', 
+      icon: <Bot className="w-6 h-6" />, 
+      onClick: () => {
+        if (!userPermissions.aiChat) return alert('عذراً، ليس لديك صلاحية للوصول إلى هذه الخدمة');
+        setActiveModal('ai');
+      },
+      disabled: !userPermissions.aiChat
+    },
   ];
 
   return (

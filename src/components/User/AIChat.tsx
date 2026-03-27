@@ -6,6 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles } from 'lucide-react';
 import { generateResponse } from '../../services/ai';
+import { auth, logUserActivity } from '../../firebase';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 
@@ -46,6 +47,10 @@ export const AIChat: React.FC = () => {
 
     const aiResponse = await generateResponse(input);
     
+    if (auth.currentUser) {
+      await logUserActivity(auth.currentUser.uid, 'استخدام العاصم AI', `سؤال: ${input.substring(0, 50)}...`);
+    }
+
     const aiMsg: Message = {
       id: (Date.now() + 1).toString(),
       text: aiResponse || "عذراً، لم أتمكن من معالجة طلبك.",

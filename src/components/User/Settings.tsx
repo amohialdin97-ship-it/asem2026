@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { User, Mail, Lock, History, Globe, Moon, LogOut, Save } from 'lucide-react';
 import { updateProfile, signOut } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from '../../firebase';
+import { auth, db, handleFirestoreError, OperationType, logUserActivity } from '../../firebase';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -52,6 +52,7 @@ export const Settings: React.FC = () => {
         lastName: name.split(' ').slice(1).join(' ') || '',
         email: trimmedEmail 
       });
+      await logUserActivity(auth.currentUser.uid, 'تحديث الملف الشخصي', 'تم تحديث بيانات الملف الشخصي بنجاح');
       alert('تم تحديث الملف الشخصي بنجاح');
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'users');
@@ -62,6 +63,9 @@ export const Settings: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      if (auth.currentUser) {
+        await logUserActivity(auth.currentUser.uid, 'تسجيل الخروج', 'تم تسجيل الخروج من الحساب');
+      }
       await signOut(auth);
     } catch (err) {
       console.error(err);

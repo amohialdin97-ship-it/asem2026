@@ -20,7 +20,10 @@ import {
   XCircle,
   Search,
   Lock,
-  Unlock
+  Unlock,
+  Activity,
+  Calendar,
+  GripVertical
 } from 'lucide-react';
 import { 
   collection, 
@@ -39,7 +42,8 @@ import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Badge } from '../ui/Badge';
-import { User, SliderImage, NewsItem, MaintenanceOrder, BuyPhoneOrder } from '../../types';
+import { Modal } from '../ui/Modal';
+import { User, SliderImage, NewsItem, MaintenanceOrder, BuyPhoneOrder, ServiceIcon, UserActivity } from '../../types';
 
 export const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'orders' | 'users' | 'content' | 'notifications' | 'settings'>('orders');
@@ -52,6 +56,7 @@ export const AdminDashboard: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [sliderImages, setSliderImages] = useState<SliderImage[]>([]);
   const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [serviceIcons, setServiceIcons] = useState<ServiceIcon[]>([]);
   const [maintenanceOrders, setMaintenanceOrders] = useState<MaintenanceOrder[]>([]);
   const [buyPhoneOrders, setBuyPhoneOrders] = useState<BuyPhoneOrder[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -59,10 +64,80 @@ export const AdminDashboard: React.FC = () => {
   const [newNews, setNewNews] = useState('');
   const [newSliderUrl, setNewSliderUrl] = useState('');
   const [newSliderTitle, setNewSliderTitle] = useState('');
+  const [newIconName, setNewIconName] = useState('');
+  const [newIconType, setNewIconType] = useState<'maintenance' | 'buyPhone' | 'accounting' | 'aiChat' | 'custom'>('custom');
+  const [newIconOrder, setNewIconOrder] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [notificationText, setNotificationText] = useState('');
   const [targetPhone, setTargetPhone] = useState('');
   const [notifType, setNotifType] = useState<'all' | 'specific'>('all');
+
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; type: 'news' | 'slider' | 'icon' | null; id: string | null }>({
+    isOpen: false,
+    type: null,
+    id: null
+  });
+
+  const [draggedIconId, setDraggedIconId] = useState<string | null>(null);
+
+  const handleIconDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedIconId(id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleIconDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleIconDrop = async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedIconId || draggedIconId === targetId) return;
+
+    const draggedIndex = serviceIcons.findIndex(icon => icon.id === draggedIconId);
+    const targetIndex = serviceIcons.findIndex(icon => icon.id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newIcons = [...serviceIcons];
+    const [draggedItem] = newIcons.splice(draggedIndex, 1);
+    newIcons.splice(targetIndex, 0, draggedItem);
+
+    try {
+      const updates = newIcons.map((icon, index) => {
+        if (icon.order !== index) {
+          return updateDoc(doc(db, 'serviceIcons', icon.id!), { order: index });
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(updates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'serviceIcons');
+    }
+    setDraggedIconId(null);
+  };
+
+  const [userActivities, setUserActivities] = useState<UserActivity[]>([]);
+  const [selectedUserIdForActivity, setSelectedUserIdForActivity] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedUserIdForActivity) {
+      setUserActivities([]);
+      return;
+    }
+    const q = query(
+      collection(db, 'userActivities'),
+      where('userId', '==', selectedUserIdForActivity),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setUserActivities(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserActivity)));
+    });
+    return () => unsubscribe();
+  }, [selectedUserIdForActivity]);
 
   useEffect(() => {
     // Fetch Users
@@ -78,6 +153,11 @@ export const AdminDashboard: React.FC = () => {
     // Fetch News Items
     const unsubscribeNews = onSnapshot(query(collection(db, 'newsItems'), orderBy('createdAt', 'desc')), (snapshot) => {
       setNewsItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as NewsItem)));
+    });
+
+    // Fetch Service Icons
+    const unsubscribeIcons = onSnapshot(query(collection(db, 'serviceIcons'), orderBy('order', 'asc')), (snapshot) => {
+      setServiceIcons(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceIcon)));
     });
 
     // Fetch Maintenance Orders
@@ -106,6 +186,7 @@ export const AdminDashboard: React.FC = () => {
       unsubscribeUsers();
       unsubscribeSlider();
       unsubscribeNews();
+      unsubscribeIcons();
       unsubscribeMaintenance();
       unsubscribeBuy();
       unsubscribeSettings();
@@ -117,6 +198,29 @@ export const AdminDashboard: React.FC = () => {
     try {
       await updateDoc(doc(db, 'users', user.uid), {
         isBlocked: !user.isBlocked
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'users');
+    }
+  };
+
+  const toggleUserPermission = async (user: User, permissionKey: keyof User['permissions']) => {
+    try {
+      const currentPermissions = user.permissions || {
+        maintenance: true,
+        buyPhone: true,
+        accounting: true,
+        aiChat: true
+      };
+      const newValue = !currentPermissions[permissionKey];
+      await updateDoc(doc(db, 'users', user.uid), {
+        [`permissions.${permissionKey}`]: newValue
+      });
+      await addDoc(collection(db, 'userActivities'), {
+        userId: user.uid,
+        action: 'تغيير صلاحية',
+        details: `تم ${newValue ? 'منح' : 'سحب'} صلاحية ${permissionKey}`,
+        createdAt: Date.now()
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'users');
@@ -136,11 +240,24 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const deleteNews = async (id: string) => {
+  const confirmDelete = (type: 'news' | 'slider' | 'icon', id: string) => {
+    setDeleteModal({ isOpen: true, type, id });
+  };
+
+  const executeDelete = async () => {
+    if (!deleteModal.id || !deleteModal.type) return;
+
     try {
-      await deleteDoc(doc(db, 'newsItems', id));
+      if (deleteModal.type === 'news') {
+        await deleteDoc(doc(db, 'newsItems', deleteModal.id));
+      } else if (deleteModal.type === 'slider') {
+        await deleteDoc(doc(db, 'sliderImages', deleteModal.id));
+      } else if (deleteModal.type === 'icon') {
+        await deleteDoc(doc(db, 'serviceIcons', deleteModal.id));
+      }
+      setDeleteModal({ isOpen: false, type: null, id: null });
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'newsItems');
+      handleFirestoreError(err, OperationType.DELETE, deleteModal.type === 'news' ? 'newsItems' : deleteModal.type === 'slider' ? 'sliderImages' : 'serviceIcons');
     }
   };
 
@@ -160,11 +277,21 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const deleteSliderImage = async (id: string) => {
+  const addServiceIcon = async () => {
+    if (!newIconName.trim() || !newIconOrder.trim()) return;
     try {
-      await deleteDoc(doc(db, 'sliderImages', id));
+      await addDoc(collection(db, 'serviceIcons'), {
+        name: newIconName,
+        iconType: newIconType,
+        order: parseInt(newIconOrder, 10),
+        description: '',
+        createdAt: Date.now()
+      });
+      setNewIconName('');
+      setNewIconType('custom');
+      setNewIconOrder('');
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'sliderImages');
+      handleFirestoreError(err, OperationType.WRITE, 'serviceIcons');
     }
   };
 
@@ -209,13 +336,39 @@ export const AdminDashboard: React.FC = () => {
 
   const filteredUsers = users.filter(u => u.phoneNumber?.includes(searchPhone));
 
-  const maintenancePending = maintenanceOrders.filter(o => o.status === 'pending');
-  const maintenanceProcessing = maintenanceOrders.filter(o => o.status === 'processing');
-  const maintenanceCompleted = maintenanceOrders.filter(o => o.status === 'completed');
+  const filterByDate = (order: { createdAt: number }) => {
+    if (!startDate && !endDate) return true;
+    const orderDate = new Date(order.createdAt);
+    orderDate.setHours(0, 0, 0, 0);
 
-  const buyPending = buyPhoneOrders.filter(o => o.status === 'pending');
-  const buyProcessing = buyPhoneOrders.filter(o => o.status === 'processing');
-  const buyCompleted = buyPhoneOrders.filter(o => o.status === 'completed');
+    let isAfterStart = true;
+    let isBeforeEnd = true;
+
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      isAfterStart = orderDate >= start;
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      isBeforeEnd = orderDate <= end;
+    }
+
+    return isAfterStart && isBeforeEnd;
+  };
+
+  const filteredMaintenanceOrders = maintenanceOrders.filter(filterByDate);
+  const filteredBuyPhoneOrders = buyPhoneOrders.filter(filterByDate);
+
+  const maintenancePending = filteredMaintenanceOrders.filter(o => o.status === 'pending');
+  const maintenanceProcessing = filteredMaintenanceOrders.filter(o => o.status === 'processing');
+  const maintenanceCompleted = filteredMaintenanceOrders.filter(o => o.status === 'completed');
+
+  const buyPending = filteredBuyPhoneOrders.filter(o => o.status === 'pending');
+  const buyProcessing = filteredBuyPhoneOrders.filter(o => o.status === 'processing');
+  const buyCompleted = filteredBuyPhoneOrders.filter(o => o.status === 'completed');
 
   const renderMaintenanceCard = (order: MaintenanceOrder) => (
     <Card key={order.id} className="p-4">
@@ -288,7 +441,7 @@ export const AdminDashboard: React.FC = () => {
             <span className="text-xs font-bold">الطلبات النشطة</span>
           </div>
           <span className="text-xl font-bold text-blue-700">
-            {maintenanceOrders.filter(o => o.status !== 'completed').length + buyPhoneOrders.filter(o => o.status !== 'completed').length}
+            {filteredMaintenanceOrders.filter(o => o.status !== 'completed').length + filteredBuyPhoneOrders.filter(o => o.status !== 'completed').length}
           </span>
         </Card>
       </div>
@@ -318,6 +471,24 @@ export const AdminDashboard: React.FC = () => {
       <div className="flex flex-col gap-4">
         {activeTab === 'orders' && (
           <div className="flex flex-col gap-6">
+            {/* Date Filters */}
+            <Card className="p-4">
+              <h4 className="text-sm font-bold mb-3 flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                تصفية حسب التاريخ
+              </h4>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 mb-1 block">من تاريخ</label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 mb-1 block">إلى تاريخ</label>
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                </div>
+              </div>
+            </Card>
+
             {/* Pending Orders */}
             <section>
               <h3 className="text-sm font-bold text-yellow-600 mb-3 flex items-center justify-between bg-yellow-50 p-2 rounded-lg">
@@ -326,16 +497,37 @@ export const AdminDashboard: React.FC = () => {
                   طلبات قيد الانتظار
                 </div>
                 <Badge variant="warning">
-                  {maintenanceOrders.filter(o => o.status === 'pending').length + buyPhoneOrders.filter(o => o.status === 'pending').length}
+                  {maintenancePending.length + buyPending.length}
                 </Badge>
               </h3>
-              <div className="flex flex-col gap-3">
-                {maintenanceOrders.filter(o => o.status === 'pending').map(order => renderMaintenanceCard(order))}
-                {buyPhoneOrders.filter(o => o.status === 'pending').map(order => renderBuyPhoneCard(order))}
-                {maintenanceOrders.filter(o => o.status === 'pending').length === 0 && buyPhoneOrders.filter(o => o.status === 'pending').length === 0 && (
-                  <p className="text-center text-gray-500 text-sm py-4">لا توجد طلبات قيد الانتظار</p>
-                )}
-              </div>
+              
+              {maintenancePending.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-2">
+                    <Wrench className="w-3 h-3" />
+                    طلبات الصيانة ({maintenancePending.length})
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    {maintenancePending.map(order => renderMaintenanceCard(order))}
+                  </div>
+                </div>
+              )}
+
+              {buyPending.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-2">
+                    <Smartphone className="w-3 h-3" />
+                    طلبات شراء الهواتف ({buyPending.length})
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    {buyPending.map(order => renderBuyPhoneCard(order))}
+                  </div>
+                </div>
+              )}
+
+              {maintenancePending.length === 0 && buyPending.length === 0 && (
+                <p className="text-center text-gray-500 text-sm py-4">لا توجد طلبات قيد الانتظار</p>
+              )}
             </section>
 
             {/* Processing Orders */}
@@ -346,16 +538,37 @@ export const AdminDashboard: React.FC = () => {
                   طلبات جاري العمل عليها
                 </div>
                 <Badge variant="info">
-                  {maintenanceOrders.filter(o => o.status === 'processing').length + buyPhoneOrders.filter(o => o.status === 'processing').length}
+                  {maintenanceProcessing.length + buyProcessing.length}
                 </Badge>
               </h3>
-              <div className="flex flex-col gap-3">
-                {maintenanceOrders.filter(o => o.status === 'processing').map(order => renderMaintenanceCard(order))}
-                {buyPhoneOrders.filter(o => o.status === 'processing').map(order => renderBuyPhoneCard(order))}
-                {maintenanceOrders.filter(o => o.status === 'processing').length === 0 && buyPhoneOrders.filter(o => o.status === 'processing').length === 0 && (
-                  <p className="text-center text-gray-500 text-sm py-4">لا توجد طلبات جاري العمل عليها</p>
-                )}
-              </div>
+
+              {maintenanceProcessing.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-2">
+                    <Wrench className="w-3 h-3" />
+                    طلبات الصيانة ({maintenanceProcessing.length})
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    {maintenanceProcessing.map(order => renderMaintenanceCard(order))}
+                  </div>
+                </div>
+              )}
+
+              {buyProcessing.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-2">
+                    <Smartphone className="w-3 h-3" />
+                    طلبات شراء الهواتف ({buyProcessing.length})
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    {buyProcessing.map(order => renderBuyPhoneCard(order))}
+                  </div>
+                </div>
+              )}
+
+              {maintenanceProcessing.length === 0 && buyProcessing.length === 0 && (
+                <p className="text-center text-gray-500 text-sm py-4">لا توجد طلبات جاري العمل عليها</p>
+              )}
             </section>
 
             {/* Completed Orders */}
@@ -366,16 +579,37 @@ export const AdminDashboard: React.FC = () => {
                   طلبات مكتملة
                 </div>
                 <Badge variant="success">
-                  {maintenanceOrders.filter(o => o.status === 'completed').length + buyPhoneOrders.filter(o => o.status === 'completed').length}
+                  {maintenanceCompleted.length + buyCompleted.length}
                 </Badge>
               </h3>
-              <div className="flex flex-col gap-3">
-                {maintenanceOrders.filter(o => o.status === 'completed').map(order => renderMaintenanceCard(order))}
-                {buyPhoneOrders.filter(o => o.status === 'completed').map(order => renderBuyPhoneCard(order))}
-                {maintenanceOrders.filter(o => o.status === 'completed').length === 0 && buyPhoneOrders.filter(o => o.status === 'completed').length === 0 && (
-                  <p className="text-center text-gray-500 text-sm py-4">لا توجد طلبات مكتملة</p>
-                )}
-              </div>
+
+              {maintenanceCompleted.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-2">
+                    <Wrench className="w-3 h-3" />
+                    طلبات الصيانة ({maintenanceCompleted.length})
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    {maintenanceCompleted.map(order => renderMaintenanceCard(order))}
+                  </div>
+                </div>
+              )}
+
+              {buyCompleted.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-2">
+                    <Smartphone className="w-3 h-3" />
+                    طلبات شراء الهواتف ({buyCompleted.length})
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    {buyCompleted.map(order => renderBuyPhoneCard(order))}
+                  </div>
+                </div>
+              )}
+
+              {maintenanceCompleted.length === 0 && buyCompleted.length === 0 && (
+                <p className="text-center text-gray-500 text-sm py-4">لا توجد طلبات مكتملة</p>
+              )}
             </section>
           </div>
         )}
@@ -391,22 +625,75 @@ export const AdminDashboard: React.FC = () => {
               />
             </div>
             {filteredUsers.map((user) => (
-              <Card key={user.uid} className="p-4 flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold">{user.firstName} {user.lastName}</h4>
-                  <p className="text-xs text-gray-500">{user.phoneNumber}</p>
-                  <Badge variant={user.isBlocked ? 'error' : 'success'}>
-                    {user.isBlocked ? 'محظور' : 'نشط'}
-                  </Badge>
+              <Card key={user.uid} className="p-4 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold">{user.firstName} {user.lastName}</h4>
+                    <p className="text-xs text-gray-500">{user.phoneNumber}</p>
+                    <Badge variant={user.isBlocked ? 'error' : 'success'}>
+                      {user.isBlocked ? 'محظور' : 'نشط'}
+                    </Badge>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      className="p-2"
+                      onClick={() => setSelectedUserIdForActivity(user.uid)}
+                      title="سجل النشاط"
+                    >
+                      <Activity className="w-4 h-4" />
+                    </Button>
+                    <Button 
+                      variant={user.isBlocked ? 'primary' : 'outline'} 
+                      className="p-2"
+                      onClick={() => toggleBlockUser(user)}
+                    >
+                      {user.isBlocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button 
-                    variant={user.isBlocked ? 'primary' : 'outline'} 
-                    className="p-2"
-                    onClick={() => toggleBlockUser(user)}
-                  >
-                    {user.isBlocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                  </Button>
+
+                {/* Permissions Section */}
+                <div className="border-t pt-3 mt-1">
+                  <h5 className="text-xs font-bold text-gray-600 mb-2">صلاحيات المستخدم:</h5>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs cursor-pointer hover:bg-gray-100">
+                      <span>طلب صيانة</span>
+                      <input
+                        type="checkbox"
+                        checked={user.permissions?.maintenance ?? true}
+                        onChange={() => toggleUserPermission(user, 'maintenance')}
+                        className="accent-red-600"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs cursor-pointer hover:bg-gray-100">
+                      <span>شراء هاتف</span>
+                      <input
+                        type="checkbox"
+                        checked={user.permissions?.buyPhone ?? true}
+                        onChange={() => toggleUserPermission(user, 'buyPhone')}
+                        className="accent-red-600"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs cursor-pointer hover:bg-gray-100">
+                      <span>دفتر الحسابات</span>
+                      <input
+                        type="checkbox"
+                        checked={user.permissions?.accounting ?? true}
+                        onChange={() => toggleUserPermission(user, 'accounting')}
+                        className="accent-red-600"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs cursor-pointer hover:bg-gray-100">
+                      <span>العاصم AI</span>
+                      <input
+                        type="checkbox"
+                        checked={user.permissions?.aiChat ?? true}
+                        onChange={() => toggleUserPermission(user, 'aiChat')}
+                        className="accent-red-600"
+                      />
+                    </label>
+                  </div>
                 </div>
               </Card>
             ))}
@@ -429,7 +716,7 @@ export const AdminDashboard: React.FC = () => {
                 {sliderImages.map(img => (
                   <div key={img.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                     <span className="text-xs truncate max-w-[200px]">{img.title}</span>
-                    <button onClick={() => deleteSliderImage(img.id!)} className="text-red-500">
+                    <button onClick={() => confirmDelete('slider', img.id!)} className="text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -446,7 +733,54 @@ export const AdminDashboard: React.FC = () => {
                 {newsItems.map(item => (
                   <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
                     <span className="text-xs truncate max-w-[200px]">{item.text}</span>
-                    <button onClick={() => deleteNews(item.id!)} className="text-red-500">
+                    <button onClick={() => confirmDelete('news', item.id!)} className="text-red-500">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            <Card className="p-4">
+              <h4 className="text-sm font-bold mb-4">أيقونات الخدمات</h4>
+              <div className="flex flex-col gap-3 mb-4">
+                <Input placeholder="اسم الأيقونة" value={newIconName} onChange={(e) => setNewIconName(e.target.value)} />
+                <select 
+                  value={newIconType} 
+                  onChange={(e) => setNewIconType(e.target.value as any)}
+                  className="w-full p-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none transition-all text-sm"
+                >
+                  <option value="maintenance">صيانة</option>
+                  <option value="buyPhone">شراء هاتف</option>
+                  <option value="accounting">محاسبة</option>
+                  <option value="aiChat">العاصم AI</option>
+                  <option value="custom">مخصص</option>
+                </select>
+                <Input type="number" placeholder="الترتيب (رقم)" value={newIconOrder} onChange={(e) => setNewIconOrder(e.target.value)} />
+                <Button onClick={addServiceIcon} fullWidth>
+                  <Plus className="w-4 h-4 ml-2" />
+                  إضافة أيقونة
+                </Button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {serviceIcons.map(icon => (
+                  <div 
+                    key={icon.id} 
+                    className={`flex items-center justify-between p-2 bg-gray-50 rounded-lg transition-all ${draggedIconId === icon.id ? 'opacity-50' : ''}`}
+                    draggable
+                    onDragStart={(e) => handleIconDragStart(e, icon.id!)}
+                    onDragOver={handleIconDragOver}
+                    onDrop={(e) => handleIconDrop(e, icon.id!)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
+                        <GripVertical className="w-4 h-4" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold">{icon.name}</span>
+                        <span className="text-[10px] text-gray-500">النوع: {icon.iconType} | الترتيب: {icon.order}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => confirmDelete('icon', icon.id!)} className="text-red-500">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -571,6 +905,58 @@ export const AdminDashboard: React.FC = () => {
           </Card>
         )}
       </div>
+
+      <Modal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, type: null, id: null })}
+        title="تأكيد الحذف"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-600">
+            هل أنت متأكد من أنك تريد حذف {deleteModal.type === 'news' ? 'هذا الخبر' : deleteModal.type === 'slider' ? 'هذه الصورة' : 'هذه الأيقونة'}؟ لا يمكن التراجع عن هذا الإجراء.
+          </p>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="flex-1"
+              onClick={() => setDeleteModal({ isOpen: false, type: null, id: null })}
+            >
+              إلغاء
+            </Button>
+            <Button 
+              variant="primary" 
+              className="flex-1 bg-red-600 hover:bg-red-700"
+              onClick={executeDelete}
+            >
+              نعم، احذف
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!selectedUserIdForActivity}
+        onClose={() => setSelectedUserIdForActivity(null)}
+        title="سجل نشاط المستخدم"
+      >
+        <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-2">
+          {userActivities.length === 0 ? (
+            <p className="text-center text-gray-500 text-sm py-4">لا يوجد نشاط مسجل لهذا المستخدم</p>
+          ) : (
+            userActivities.map(activity => (
+              <div key={activity.id} className="flex flex-col p-3 bg-gray-50 rounded-lg border border-gray-100">
+                <div className="flex justify-between items-start mb-1">
+                  <span className="font-bold text-sm text-red-600">{activity.action}</span>
+                  <span className="text-[10px] text-gray-400">
+                    {new Date(activity.createdAt).toLocaleString('ar-SA')}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600">{activity.details}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

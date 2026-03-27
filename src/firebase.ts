@@ -5,7 +5,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase SDK
@@ -63,3 +63,16 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
+
+export const logUserActivity = async (userId: string, action: string, details: string) => {
+  try {
+    await addDoc(collection(db, 'userActivities'), {
+      userId,
+      action,
+      details,
+      createdAt: Date.now()
+    });
+  } catch (err) {
+    console.error('Failed to log activity:', err);
+  }
+};

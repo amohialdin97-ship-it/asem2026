@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { Camera, Image as ImageIcon, Send, X } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../firebase';
+import { db, auth, handleFirestoreError, OperationType, logUserActivity } from '../../firebase';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 
@@ -40,6 +40,7 @@ export const MaintenanceForm: React.FC<{ onClose: () => void }> = ({ onClose }) 
         status: 'pending',
         createdAt: Date.now()
       });
+      await logUserActivity(auth.currentUser.uid, 'إنشاء طلب صيانة', `تم إنشاء طلب صيانة جديد: ${problem.substring(0, 50)}...`);
       onClose();
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'maintenanceOrders');

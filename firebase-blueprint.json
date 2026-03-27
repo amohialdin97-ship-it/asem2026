@@ -94,6 +94,33 @@
       },
       "required": ["id", "userId", "type", "name", "amount", "currency", "createdAt"]
     },
+    "ServiceIcon": {
+      "title": "ServiceIcon",
+      "description": "Custom service icons for the home screen",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "iconType": { "type": "string", "enum": ["maintenance", "buyPhone", "accounting", "aiChat", "custom"] },
+        "order": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "iconType", "order", "createdAt"]
+    },
+    "UserActivity": {
+      "title": "UserActivity",
+      "description": "Log of user actions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "action", "details", "createdAt"]
+    },
     "AppSettings": {
       "title": "AppSettings",
       "description": "Global store settings",
@@ -137,6 +164,14 @@
     "/accountingEntries/{entryId}": {
       "schema": "AccountingEntry",
       "description": "User accounting entries"
+    },
+    "/serviceIcons/{iconId}": {
+      "schema": "ServiceIcon",
+      "description": "Custom service icons"
+    },
+    "/userActivities/{activityId}": {
+      "schema": "UserActivity",
+      "description": "User activity logs"
     },
     "/settings/global": {
       "schema": "AppSettings",

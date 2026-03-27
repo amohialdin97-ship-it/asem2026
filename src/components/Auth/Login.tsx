@@ -14,7 +14,7 @@ import {
   signInWithPopup
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../../firebase';
+import { auth, db, logUserActivity } from '../../firebase';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
@@ -60,6 +60,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           setError('هذا الحساب محظور.');
           await auth.signOut();
         } else {
+          await logUserActivity(user.uid, 'تسجيل الدخول', 'تم تسجيل الدخول بنجاح عبر Google');
           onLogin(userData.role);
         }
       } else {
@@ -82,6 +83,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           createdAt: Date.now()
         };
         await setDoc(doc(db, 'users', user.uid), userData);
+        await logUserActivity(user.uid, 'تسجيل حساب جديد', 'تم إنشاء حساب جديد عبر Google');
         onLogin(userData.role);
       }
     } catch (err: any) {
@@ -124,6 +126,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           setError('هذا الحساب محظور.');
           await auth.signOut();
         } else {
+          await logUserActivity(userCredential.user.uid, 'تسجيل الدخول', 'تم تسجيل الدخول بنجاح');
           onLogin(userData.role);
         }
       }
@@ -190,6 +193,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       };
 
       await setDoc(doc(db, 'users', user.uid), userData);
+      await logUserActivity(user.uid, 'تسجيل حساب جديد', 'تم إنشاء حساب جديد بنجاح');
       onLogin(userData.role);
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {

@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Download, Share2, Wallet, Users, ArrowUpRight, ArrowDownLeft, Trash2 } from 'lucide-react';
 import { collection, addDoc, onSnapshot, query, where, orderBy, deleteDoc, doc } from 'firebase/firestore';
-import { db, auth, handleFirestoreError, OperationType } from '../../firebase';
+import { db, auth, handleFirestoreError, OperationType, logUserActivity } from '../../firebase';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
@@ -51,6 +51,7 @@ export const AccountingBook: React.FC = () => {
         currency: 'ريال',
         createdAt: Date.now()
       });
+      await logUserActivity(auth.currentUser.uid, 'إضافة قيد محاسبي', `تم إضافة قيد جديد لـ ${name} بقيمة ${amount} ريال`);
       setName('');
       setAmount('');
       setShowAdd(false);
@@ -63,7 +64,9 @@ export const AccountingBook: React.FC = () => {
 
   const handleDeleteEntry = async (id: string) => {
     try {
+      if (!auth.currentUser) return;
       await deleteDoc(doc(db, 'accountingEntries', id));
+      await logUserActivity(auth.currentUser.uid, 'حذف قيد محاسبي', `تم حذف قيد محاسبي`);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'accountingEntries');
     }
